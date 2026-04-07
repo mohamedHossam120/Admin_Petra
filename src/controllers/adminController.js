@@ -127,3 +127,32 @@ exports.getAdminUsers = async (req, res) => {
         });
     }
 };
+exports.deleteAdmin = async (req, res) => {
+    const { id } = req.params; // بناخد الـ ID من الرابط
+    const connection = await db.getConnection();
+
+    try {
+        await connection.beginTransaction();
+
+        // 1. حذف البيانات المرتبطة من جدول admins أولاً (بسبب الـ Foreign Key)
+        await connection.execute('DELETE FROM admins WHERE user_id = ?', [id]);
+
+        // 2. حذف المستخدم من جدول users
+        const [result] = await connection.execute('DELETE FROM users WHERE user_id = ?', [id]);
+
+        if (result.affectedRows === 0) {
+            await connection.rollback();
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        await connection.commit();
+        return res.status(200).json({ success: true, message: "Admin deleted successfully" });
+
+    } catch (err) {
+        await connection.rollback();
+        console.error("Delete Error:", err);
+        return res.status(500).json({ success: false, message: "Server error", error: err.message });
+    } finally {
+        connection.release();
+    }
+};
