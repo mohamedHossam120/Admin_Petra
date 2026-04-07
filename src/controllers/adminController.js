@@ -156,3 +156,57 @@ exports.deleteAdmin = async (req, res) => {
         connection.release();
     }
 };
+exports.updateAdmin = async (req, res) => {
+    const { id } = req.params; // الـ ID بتاع المستخدم
+    const { 
+        user_first_name, 
+        user_last_name, 
+        user_email, 
+        user_pass, 
+        user_phone, 
+        user_address,
+        user_role,
+        user_status,
+        description 
+    } = req.body;
+
+    const connection = await db.getConnection();
+    
+    try {
+        await connection.beginTransaction();
+
+        // 1. تحديث جدول users
+        let userSql = `
+            UPDATE users 
+            SET user_first_name = ?, user_last_name = ?, user_email = ?, 
+                user_phone = ?, user_address = ?, user_role = ?, user_status = ?
+        `;
+        let params = [user_first_name, user_last_name, user_email, user_phone, user_address, user_role, user_status];
+
+        // لو فيه باسورد جديدة، بنشفرها ونضيفها للـ Query
+        if (user_pass && user_pass.trim() !== "") {
+            const hashedPassword = await bcrypt.hash(user_pass, 10);
+            userSql += `, user_pass = ?`;
+            params.push(hashedPassword);
+        }
+
+        userSql += ` WHERE user_id = ?`;
+        params.push(id);
+
+        await connection.execute(userSql, params);
+
+        // 2. تحديث جدول admins (الوصف)
+        const adminSql = `UPDATE admins SET description = ? WHERE user_id = ?`;
+        await connection.execute(adminSql, [description || 'Petra System User', id]);
+
+        await connection.commit();
+        return res.status(200).json({ success: true, message: "User updated successfully" });
+
+    } catch (err) {
+        await connection.rollback();
+        console.error("Update Error:", err);
+        return res.status(500).json({ success: false, message: "Update failed", error: err.message });
+    } finally {
+        connection.release();
+    }
+};
